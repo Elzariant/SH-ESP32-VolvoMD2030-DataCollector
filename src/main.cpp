@@ -5,10 +5,10 @@
 ********************************************************/
 
 
-#include <Adafruit_GFX.h>
+//#include <Adafruit_GFX.h>
 //#include <Adafruit_SSD1306.h>
 //#include <N2kMessages.h>
-#include <NMEA2000_esp32.h>
+//#include <NMEA2000_esp32.h>
 
 #include "sensesp/sensors/analog_input.h"
 #include "sensesp/sensors/digital_input.h"
@@ -26,6 +26,8 @@
 
 using namespace sensesp;
 
+// Fuel Tank Capacity interpreter
+
 class TankCapacityInterpreter : public CurveInterpolator {
  public:
   TankCapacityInterpreter(String config_path = "")
@@ -41,6 +43,8 @@ class TankCapacityInterpreter : public CurveInterpolator {
     add_sample(CurveInterpolator::Sample(32.2, 0.0));
   }
 };
+
+// Fuel Consomption interpreter based on engine RPM
 
 class FuelInterpreter : public CurveInterpolator {
  public:
@@ -65,6 +69,8 @@ class FuelInterpreter : public CurveInterpolator {
   }
 };
 
+// Coolant Temperature interpreter based on sensor FAE 31020
+
 class TemperatureInterpreter : public CurveInterpolator {
  public:
   TemperatureInterpreter(String config_path = "")
@@ -85,7 +91,12 @@ class TemperatureInterpreter : public CurveInterpolator {
   }
 };
 
-// 1-Wire data pin on SH-ESP32
+/* PIN definition :
+*       1-Wire data pin on SH-ESP32. Using DS18B20 sensors
+*       Fuel Gauge
+*       Engine Coolant Sensor
+*       RPM value coming from alternator
+*/
 #define ONEWIRE_PIN 17
 #define FUEL_GAUGE_PIN 36
 #define ENGINE_COOLANT_PIN 34
@@ -102,24 +113,22 @@ void setup() {
   SetupSerialDebug(115200);
 #endif
 
- // SensESPAppBuilder builder;
-
-  //sensesp_app = builder.set_hostname("temperatures")->get_app();
-
-
 SensESPAppBuilder builder;
   sensesp_app = (&builder)
                     // Set a custom hostname for the app.
                     ->set_hostname("StelamayaMD2030")
                     // Optionally, hard-code the WiFi and Signal K server
                     // settings. This is normally not needed.
-                    ->set_wifi("Stelamaya", "@Helios01!")
+//                    ->set_wifi("Stelamaya", "@Helios01!")
+                    ->set_wifi("Nova_Wifi", "@Helios01!")
                     ->set_sk_server("stelamayarpi4.local", 3000)
                     ->enable_uptime_sensor()
                     ->get_app();
 
 
-// DS18B20 Temperatures
+/***************************************************************************
+* DS18B20 Temperatures : exhaust gaz and various
+***************************************************************************/
 
 DallasTemperatureSensors* dts = new DallasTemperatureSensors(ONEWIRE_PIN);
 
@@ -169,7 +178,10 @@ main_engine_exhaust_temperature->connect_to(
 );
   
 
-/// Engine Coolant Temp Config ////
+
+/***************************************************************************
+* FAE31020 Sensor : Engine Coolant Temp Config
+***************************************************************************/
 
 auto* main_engine_coolant_temperature = new AnalogInput(ENGINE_COOLANT_PIN, 2000);
 const float Vin = 3.3;
@@ -195,8 +207,9 @@ main_engine_coolant_temperature
 );
 
 
-
-/// Fuel Gauge ////
+/***************************************************************************
+* Tank remaining capacity using fuel gauge
+**********************$******************************************************/
 
 auto* main_engine_tank_capacity = new AnalogInput(FUEL_GAUGE_PIN, 1000);
 const float R2 = 100;
@@ -223,7 +236,9 @@ main_engine_tank_capacity
     );
 
 
-//RPM Application/////
+/***************************************************************************
+* Engine RPM : get value from alternator rotation speed
+***************************************************************************/
 
 auto* main_engine_rpm = new DigitalInputCounter(RPM_PIN, INPUT_PULLUP, RISING, 500);
 const char* config_path_calibrate = "/Engine RPM/calibrate";
@@ -271,6 +286,9 @@ main_engine_rpm
     );                                       
 
 
+/***************************************************************************
+* Starting Application
+***************************************************************************/
 
 sensesp_app->start();
 }
