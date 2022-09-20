@@ -4,7 +4,6 @@
 *
 ********************************************************/
 
-
 //#include <Adafruit_GFX.h>
 //#include <Adafruit_SSD1306.h>
 //#include <N2kMessages.h>
@@ -27,15 +26,12 @@
 using namespace sensesp;
 
 // Fuel Tank Capacity interpreter
-
 class TankCapacityInterpreter : public CurveInterpolator {
  public:
   TankCapacityInterpreter(String config_path = "")
       : CurveInterpolator(NULL, config_path) {
-    // Populate a lookup table to translate the ohm values returned by
-    // our temperature sender to degrees Kelvin
+    // Populate a lookup table to translate measure into a %
     clear_samples();
-    // addSample(CurveInterpolator::Sample(knownOhmValue, knownCapacity%));
     add_sample(CurveInterpolator::Sample(9.6, 1));
     add_sample(CurveInterpolator::Sample(11.5, 0.75));
     add_sample(CurveInterpolator::Sample(14.1, 0.50));
@@ -44,8 +40,7 @@ class TankCapacityInterpreter : public CurveInterpolator {
   }
 };
 
-// Fuel Consomption interpreter based on engine RPM
-
+// **NOT IMPLEMENTED YET ** Fuel Consomption interpreter based on engine RPM
 class FuelInterpreter : public CurveInterpolator {
  public:
   FuelInterpreter(String config_path = "")
@@ -70,7 +65,6 @@ class FuelInterpreter : public CurveInterpolator {
 };
 
 // Coolant Temperature interpreter based on sensor FAE 31020
-
 class TemperatureInterpreter : public CurveInterpolator {
  public:
   TemperatureInterpreter(String config_path = "")
