@@ -92,15 +92,17 @@ class TemperatureInterpreter : public CurveInterpolator {
 };
 
 /* PIN definition :
-*       1-Wire data pin on SH-ESP32. Using DS18B20 sensors
-*       Fuel Gauge
-*       Engine Coolant Sensor
-*       RPM value coming from alternator
+*       - 1-Wire data pin on SH-ESP32. Using DS18B20 sensors
+*       - Fuel Gauge
+*       - Engine Coolant Sensor
+*       - RPM value coming from alternator
 */
 #define ONEWIRE_PIN 17
-#define FUEL_GAUGE_PIN 36
-#define ENGINE_COOLANT_PIN 34
+#define FUEL_GAUGE_PIN 34
+#define ENGINE_COOLANT_PIN 36
 #define RPM_PIN 16
+
+#define SERIAL_DEBUG_DISABLED 1
 
 // define temperature display units
 #define TEMP_DISPLAY_FUNC KelvinToCelsius
@@ -110,7 +112,7 @@ ReactESP app;
 
 void setup() {
 #ifndef SERIAL_DEBUG_DISABLED
-  SetupSerialDebug(115200);
+  SetupSerialDebug(250000);
 #endif
 
 SensESPAppBuilder builder;
@@ -120,10 +122,50 @@ SensESPAppBuilder builder;
                     // Optionally, hard-code the WiFi and Signal K server
                     // settings. This is normally not needed.
 //                    ->set_wifi("Stelamaya", "@Helios01!")
-                    ->set_wifi("Nova_Wifi", "@Helios01!")
-                    ->set_sk_server("stelamayarpi4.local", 3000)
+                    ->set_wifi("Livebox-Bignon", "0123456789ABCDEF9876543210")
+
+                    ->set_sk_server("192.168.1.101", 3000)
+                    // Client ID for Themis (home) : f41e7137-074a-bea3-bb6d-0fea8c75ce18
+
+                    //->set_sk_server("stelamayarpi4.local", 3000)
+                    // Client ID for stelamayarpi4 : 9ce8187e-191c-21bb-faf1-40f884d25cb5
+
                     ->enable_uptime_sensor()
                     ->get_app();
+
+
+/***************************************************************************
+* FAE31020 Sensor : Engine Coolant Temp Config
+***************************************************************************/
+
+auto* main_engine_coolant_temperature = new AnalogInput(ENGINE_COOLANT_PIN, 1000);
+const float Vin = 3.3;
+const float Rt1 = 1000.0;
+
+// Function to get the temperature based on the FAE31020 thermistor 
+auto getTemperatureFromResistance_function = [](int res) -> float{
+    //float Temp=-23.6*log(res)+204.7; // Got with Arduino but never worked here
+    float Temp=-37.7*log(res)+547.35;
+    return Temp;
+};
+
+auto getTemperatureFromResistance_transform = new LambdaTransform<int, float>(getTemperatureFromResistance_function);
+
+auto main_engine_coolant_temperature_metadata =
+    new SKMetadata("K",                 // units
+                "Coolant Temperature",  // display name
+                "Coolant Temperature",  // description
+                "Coolant Temperature",  // short name
+                10.                     // timeout, in seconds
+    );
+
+main_engine_coolant_temperature
+    //->connect_to(new AnalogVoltage()) // Never succeed in getting valuable values using these transformations
+    //->connect_to(new VoltageDividerR2(Rt1, Vin, "/EngineTemperature/sender"))
+    ->connect_to(getTemperatureFromResistance_transform)
+    ->connect_to(new SKOutputFloat("propulsion.main.coolant.temperature", "/mainEngineCoolantTemperature/sk_path", main_engine_coolant_temperature_metadata)
+);
+
 
 
 /***************************************************************************
@@ -159,60 +201,22 @@ auto main_engine_exhaust_temperature_metadata =
     );
 
 // connect the sensors to Signal K output paths
-
 main_engine_bay_temperature->connect_to(
-    new SKOutputFloat(
-        "propulsion.main.bay.temperature",
-        "/mainEngineTemp/skPath",
-        main_engine_bay_temperature_metadata
-    )
+    new SKOutputFloat("propulsion.main.bay.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata)
 );
   
 // propulsion.*.wetExhaustTemperature is a non-standard path
 main_engine_exhaust_temperature->connect_to(
-    new SKOutputFloat(
-        "propulsion.main.wetExhaustTemperature",
-        "/mainEngineWetExhaustTemp/skPath",
-        main_engine_exhaust_temperature_metadata
-    )
+    new SKOutputFloat("propulsion.main.wetExhaustTemperature", "/mainEngineWetExhaustTemperature/skPath", main_engine_exhaust_temperature_metadata)
 );
   
 
-
-/***************************************************************************
-* FAE31020 Sensor : Engine Coolant Temp Config
-***************************************************************************/
-
-auto* main_engine_coolant_temperature = new AnalogInput(ENGINE_COOLANT_PIN, 2000);
-const float Vin = 3.3;
-const float R1 = 1000.0;
-
-auto main_engine_coolant_temperature_metadata =
-    new SKMetadata("K",                        // units
-                "Coolant Temperature",  // display name
-                "Coolant Temperature",  // description
-                "Coolant Temperature",      // short name
-                10.                         // timeout, in seconds
-    );
-main_engine_coolant_temperature
-    ->connect_to(new AnalogVoltage())
-    ->connect_to(new VoltageDividerR2(R1, Vin, "/Engine Temp/sender"))
-    //->connect_to(new TemperatureInterpreter("/Engine Temp/curve"))
-    //->connect_to(new Linear(1.0, 0.0, "/Engine Temp/calibrate"))
-    ->connect_to(new SKOutputFloat(
-        "propulsion.main.coolant.temperature",
-        "/Engine Temp/sk_path",
-        main_engine_coolant_temperature_metadata
-    )
-);
-
-
 /***************************************************************************
 * Tank remaining capacity using fuel gauge
-**********************$******************************************************/
+****************************************************************************/
 
 auto* main_engine_tank_capacity = new AnalogInput(FUEL_GAUGE_PIN, 1000);
-const float R2 = 100;
+const float Rc1 = 100;
 const float CAPACITY = 90; // Capacity in 1000xLiters
 
 auto main_engine_tank_capacity_metadata =
@@ -225,14 +229,10 @@ auto main_engine_tank_capacity_metadata =
 
 main_engine_tank_capacity
     ->connect_to(new AnalogVoltage())
-    ->connect_to(new VoltageDividerR2(R2, Vin, "/FuelTank/capacity/sender"))
+    ->connect_to(new VoltageDividerR2(Rc1, Vin, "/FuelTank/capacity/sender"))
     ->connect_to(new TankCapacityInterpreter("/FuelTank/capacity/curve"))
     ->connect_to(new Linear(CAPACITY, 0.0, "/FuelTank/capacity/calibrate")) // 90L
-    ->connect_to(new SKOutputInt(
-            "propulsion.main.fuelTankCapacity.currentLevel",
-            "/mainEngineTankCapacity/skPath",
-            main_engine_tank_capacity_metadata
-        )
+    ->connect_to(new SKOutputInt("propulsion.main.fuelTankCapacity.currentLevel", "/mainEngineTankCapacity/skPath", main_engine_tank_capacity_metadata)
     );
 
 
@@ -264,12 +264,7 @@ auto main_engine_consumption_metadata =
 main_engine_rpm
     ->connect_to(new Frequency(multiplier, config_path_calibrate))  
     // connect the output of sensor to the input of Frequency()
-    ->connect_to(
-        new SKOutputFloat(
-           "propulsion.main.revolutions",
-            "/mainEngineRPM/skPath",
-            main_engine_rpm_metadata
-        )
+    ->connect_to(new SKOutputFloat("propulsion.main.revolutions", "/mainEngineRPM/skPath", main_engine_rpm_metadata)
     );  
     
 // Calculate fuel consumption
@@ -277,13 +272,9 @@ main_engine_rpm
     ->connect_to(new Frequency(6))
     // times by 6 to go from Hz to RPM
     ->connect_to(new FuelInterpreter("/Engine Fuel/curve"))
-    ->connect_to(
-        new SKOutputFloat(
-            "propulsion.engine.fuelconsumption",
-            "/Engine_consumption/sk_path",
-            main_engine_consumption_metadata
-        )
+    ->connect_to(new SKOutputFloat("propulsion.engine.fuelconsumption", "/mainEngineConsumption/sk_path", main_engine_consumption_metadata)
     );                                       
+
 
 
 /***************************************************************************
@@ -294,4 +285,28 @@ sensesp_app->start();
 }
 
 // main program loop
-void loop() { app.tick(); }
+void loop() {
+    app.tick(); 
+}
+
+/***************************************************************************
+* Calibration of FAE thermistor
+*   Based on empiric method and interpolated with Excel, I found the following curve : 
+*       y=-23.6ln(x)+204.7
+*
+*   _______
+*          |
+*         R1 = 1000 Ohms
+*          |
+*          ---------------------
+*          |
+*        FAE Thermistor        Vout
+*   _______|____________________
+*
+***************************************************************************/
+/*
+auto getTemperatureFromResistance_function = [](int res) -> float{
+    float Temp=-23.6*log(res)+204.7;
+    return Temp;
+}
+*/
