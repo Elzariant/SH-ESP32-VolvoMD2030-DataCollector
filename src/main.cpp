@@ -30,12 +30,30 @@
 *       - RPM value coming from alternator
 *       - Oled display
 */
+
+/***************************
+* PIN Definition for DFRobot Firebeetle board
+***************************/
+/*
 #define ONEWIRE_PIN 17
 #define FUEL_GAUGE_PIN 34
 #define ENGINE_COOLANT_PIN 36
 #define RPM_PIN 16
 #define SDA_PIN 21
 #define SCL_PIN 22
+*/
+
+/***************************
+* PIN Definition for DFRobot Beetle board
+***************************/
+#define ONEWIRE_PIN 13        // Pin D7
+#define FUEL_GAUGE_PIN 34     // PIN A2
+#define ENGINE_COOLANT_PIN 35 // PIN A3
+#define RPM_PIN 27            // PIN D4
+#define SDA_PIN 21
+#define SCL_PIN 22
+
+
 
 /* Screen definition :
 */
@@ -144,9 +162,12 @@ SensESPAppBuilder builder;
                     ->set_hostname("StelamayaMD2030")
                     // Optionally, hard-code the WiFi and Signal K server
                     // settings. This is normally not needed.
-                    //->set_wifi("Stelamaya", "@Helios01!")
-                    //->set_sk_server("stelamayarpi4.local", 3000)
+//                    ->set_wifi("Stelamaya", "@Helios01!")
                     ->set_wifi("Livebox-Bignon", "0123456789ABCDEF9876543210")
+//                    ->set_wifi("Nova_Wifi", "@Helios01!")
+//                    ->set_sk_server("stelamayarpi4.local", 3000)
+//                    ->set_sk_server("themis-m93p.local", 3000)
+                    //->set_wifi("Livebox-Bignon", "0123456789ABCDEF9876543210")
                     ->set_sk_server("themis-m93p.local", 3000)
                     // Client ID for Themis (home) : f41e7137-074a-bea3-bb6d-0fea8c75ce18
 
@@ -174,7 +195,7 @@ SensESPAppBuilder builder;
   display->setCursor(0, 0);
   display->printf("Host: %s", sensesp_app->get_hostname().c_str());
   display->display();
-
+  
 
 /***************************************************************************
 * FAE31020 Sensor : Engine Coolant Temp Config
@@ -252,17 +273,16 @@ auto main_engine_coolant_temperature_metadata =
 // connect the sensors to Signal K output paths
 main_engine_bay_temperature
     ->connect_to(new SKOutputFloat("propulsion.main.bay.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(2, "Engine Bay", temperature); }));
-
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(3, "Engine Bay", temperature); }));
   
 // propulsion.*.wetExhaustTemperature is a non-standard path
 main_engine_exhaust_temperature
     ->connect_to(new SKOutputFloat("propulsion.main.wetExhaustTemperature", "/mainEngineWetExhaustTemperature/skPath", main_engine_exhaust_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(3, "Exhaust", temperature); }));
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(4, "Exhaust", temperature); }));
 
 main_engine_coolant_temperature
-    ->connect_to(new SKOutputFloat("propulsion.main.wetExhaustTemperature", "/mainEngineWetExhaustTemperature/skPath", main_engine_coolant_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(4, "Coolant", temperature); }));
+    ->connect_to(new SKOutputFloat("propulsion.main.CoolantTemperature", "/mainEngineCoolantTemperature/skPath", main_engine_coolant_temperature_metadata))
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(5, "Coolant", temperature); }));
 
 
 /***************************************************************************
