@@ -54,7 +54,6 @@
 #define SCL_PIN 22
 
 
-
 /* Screen definition :
 */
 #define SCREEN_WIDTH 128
@@ -62,7 +61,7 @@
 
 // define temperature display units
 #define TEMP_DISPLAY_FUNC KelvinToCelsius
-//#define TEMP_DISPLAY_FUNC KelvinToFahrenheit
+
 
 using namespace sensesp;
 
@@ -75,13 +74,12 @@ void ClearRow(int row) { display->fillRect(0, 8 * row, SCREEN_WIDTH, 8, 0); }
 
 float KelvinToCelsius(float temp) { return temp - 273.15; }
 
-void displayData(int row, String title, float temperature) {
+void displayData(int row, String title, float value) {
   ClearRow(row);
   display->setCursor(0, 8 * row);
-  display->printf("%s: %.1f", title.c_str(), TEMP_DISPLAY_FUNC(temperature));
+  display->printf("%s: %.1f", title.c_str(), TEMP_DISPLAY_FUNC(value));
   display->display();
 }
-
 
 // Fuel Tank Capacity interpreter
 class TankCapacityInterpreter : public CurveInterpolator {
@@ -117,8 +115,8 @@ class FuelInterpreter : public CurveInterpolator {
     add_sample(CurveInterpolator::Sample(2800, 4.45));
     add_sample(CurveInterpolator::Sample(3000, 5.5));
     add_sample(CurveInterpolator::Sample(3200, 6.6));
-    add_sample(CurveInterpolator::Sample(3400, 7.2));
-    add_sample(CurveInterpolator::Sample(3800, 7.4));  
+    add_sample(CurveInterpolator::Sample(3400, 7.6));
+    add_sample(CurveInterpolator::Sample(3800, 10.0));  
   }
 };
 
@@ -168,7 +166,7 @@ SensESPAppBuilder builder;
 //                    ->set_sk_server("stelamayarpi4.local", 3000)
 //                    ->set_sk_server("themis-m93p.local", 3000)
                     //->set_wifi("Livebox-Bignon", "0123456789ABCDEF9876543210")
-                    ->set_sk_server("themis-m93p.local", 3000)
+                    ->set_sk_server("stelamayarpi4.local", 3000)
                     // Client ID for Themis (home) : f41e7137-074a-bea3-bb6d-0fea8c75ce18
 
                     //->set_sk_server("stelamayarpi4.local", 3000)
@@ -196,10 +194,10 @@ SensESPAppBuilder builder;
   display->printf("Host: %s", sensesp_app->get_hostname().c_str());
   display->display();
   
-
 /***************************************************************************
 * FAE31020 Sensor : Engine Coolant Temp Config
 ***************************************************************************/
+
 /*
 auto* main_engine_coolant_temperature = new AnalogInput(ENGINE_COOLANT_PIN, 5000);
 const float Rt1 = 1000.0;
@@ -225,7 +223,7 @@ main_engine_coolant_temperature
     //->connect_to(new AnalogVoltage()) // Never succeed in getting valuable values using these transformations
     //->connect_to(new VoltageDividerR2(Rt1, Vin, "/EngineTemperature/sender"))
     ->connect_to(getTemperatureFromResistance_transform)
-    ->connect_to(new SKOutputFloat("propulsion.main.coolant.temperature", "/mainEngineCoolantTemperature/sk_path", main_engine_coolant_temperature_metadata)) // send to SignalK
+    ->connect_to(new SKOutputFloat("propulsion.main.coolantTemperature", "/mainEngineCoolantTemperature/sk_path", main_engine_coolant_temperature_metadata)) // send to SignalK
     ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(2, "Coolant", temperature); })); // send to display
 */
 
@@ -244,7 +242,7 @@ auto main_engine_exhaust_temperature =
 auto main_engine_bay_temperature =
       new OneWireTemperature(dts, 5000, "/mainEngineBayTemp/oneWire");
 auto main_engine_coolant_temperature =
-      new OneWireTemperature(dts, 5000, "/mainEngineBayTemp/oneWire");
+      new OneWireTemperature(dts, 5000, "/mainCoolantTemp/oneWire");
 
 // define metadata for sensors
 
@@ -264,24 +262,24 @@ auto main_engine_exhaust_temperature_metadata =
     );
 auto main_engine_coolant_temperature_metadata =
     new SKMetadata("K",                        // units
-                "Cooling liquid Temperature",  // display name
-                "Cooling liquid Temperature",  // description
-                "Cooling Temperature",      // short name
+                "Coolant liquid Temperature",  // display name
+                "Coolant liquid Temperature",  // description
+                "Coolant Temperature",      // short name
                 10.                         // timeout, in seconds
     );
 
 // connect the sensors to Signal K output paths
 main_engine_bay_temperature
-    ->connect_to(new SKOutputFloat("propulsion.main.bay.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata))
+    ->connect_to(new SKOutputFloat("propulsion.main.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata))
     ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(3, "Engine Bay", temperature); }));
   
 // propulsion.*.wetExhaustTemperature is a non-standard path
 main_engine_exhaust_temperature
-    ->connect_to(new SKOutputFloat("propulsion.main.wetExhaustTemperature", "/mainEngineWetExhaustTemperature/skPath", main_engine_exhaust_temperature_metadata))
+    ->connect_to(new SKOutputFloat("propulsion.main.exhaustTemperature", "/mainEngineWetExhaustTemperature/skPath", main_engine_exhaust_temperature_metadata))
     ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(4, "Exhaust", temperature); }));
 
 main_engine_coolant_temperature
-    ->connect_to(new SKOutputFloat("propulsion.main.CoolantTemperature", "/mainEngineCoolantTemperature/skPath", main_engine_coolant_temperature_metadata))
+    ->connect_to(new SKOutputFloat("propulsion.main.coolantTemperature", "/mainEngineCoolantTemperature/skPath", main_engine_coolant_temperature_metadata))
     ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(5, "Coolant", temperature); }));
 
 
@@ -289,10 +287,12 @@ main_engine_coolant_temperature
 * Tank remaining capacity using fuel gauge
 ****************************************************************************/
 
-auto* main_engine_tank_capacity = new AnalogInput(FUEL_GAUGE_PIN, 5000);
+auto* main_engine_tank_currentVolume = new AnalogInput(FUEL_GAUGE_PIN, 5000);
 const float Rc1 = 100;
+
 const float CAPACITY = 90; // Capacity in 1000xLiters
 
+/* A retravailler 
 auto main_engine_tank_capacity_metadata =
     new SKMetadata("L",                   // units
                 "Diesel Tank Capacity",  // display name
@@ -302,11 +302,23 @@ auto main_engine_tank_capacity_metadata =
     );
 
 main_engine_tank_capacity
+    ->connect_to(new SKOutputInt("self.tanks.fuel.main.capacity", "/mainEngineTankCapacity/skPath", main_engine_tank_capacity_metadata))
+    ->connect_to(new LambdaConsumer<int>([](int capacity));
+*/
+auto main_engine_tank_level_metadata =
+    new SKMetadata("L",                   // units
+                "Diesel Tank remaining Level",  // display name
+                "Diesel Tank remaining Level",  // description
+                "Tank Level",         // short name
+                10.                    // timeout, in seconds
+    );
+
+main_engine_tank_currentVolume
     ->connect_to(new AnalogVoltage())
     ->connect_to(new VoltageDividerR2(Rc1, Vin, "/FuelTank/capacity/sender"))
     ->connect_to(new TankCapacityInterpreter("/FuelTank/capacity/curve"))
     ->connect_to(new Linear(CAPACITY, 0.0, "/FuelTank/capacity/calibrate"))
-    ->connect_to(new SKOutputInt("propulsion.main.fuelTankCapacity.currentLevel", "/mainEngineTankCapacity/skPath", main_engine_tank_capacity_metadata))
+    ->connect_to(new SKOutputInt("self.tanks.fuel.main.currentVolume", "/mainEngineTankCapacity/skPath", main_engine_tank_capacity_metadata))
     ->connect_to(new LambdaConsumer<int>([](int capacity) { displayData(6, "Tank Capacity", capacity+273.15); })); // add manually 273.15 because it is not a temperature.
 
 /***************************************************************************
