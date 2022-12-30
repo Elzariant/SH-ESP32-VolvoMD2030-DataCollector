@@ -6,6 +6,7 @@
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_BMP280.h>
 //#include <N2kMessages.h>
 //#include <NMEA2000_esp32.h>
 
@@ -65,9 +66,15 @@
 
 using namespace sensesp;
 
+// Initiate I2C : used for display and BMP280
 TwoWire* i2c;
 Adafruit_SSD1306* display;
 const float Vin = 3.3;
+
+
+Adafruit_BMP280 bmp280;
+float read_temp_callback() { return (bmp280.readTemperature() + 273.15);}
+float read_pressure_callback() { return (bmp280.readPressure());}
 
 /// Clear a text row on an Adafruit graphics display
 void ClearRow(int row) { display->fillRect(0, 8 * row, SCREEN_WIDTH, 8, 0); }
@@ -88,11 +95,24 @@ class TankCapacityInterpreter : public CurveInterpolator {
       : CurveInterpolator(NULL, config_path) {
     // Populate a lookup table to translate measure into a %
     clear_samples();
+    /*
     add_sample(CurveInterpolator::Sample(9.6, 1));
     add_sample(CurveInterpolator::Sample(11.5, 0.75));
     add_sample(CurveInterpolator::Sample(14.1, 0.50));
     add_sample(CurveInterpolator::Sample(18.2, 0.25));
-    add_sample(CurveInterpolator::Sample(32.2, 0.0));
+    add_sample(CurveInterpolator::Sample(1.5, 0.0));
+    */
+   add_sample(CurveInterpolator::Sample(1.50,0.0));
+   add_sample(CurveInterpolator::Sample(20.35,0.1));
+   add_sample(CurveInterpolator::Sample(39.20,0.2));
+   add_sample(CurveInterpolator::Sample(58.05,0.3));
+   add_sample(CurveInterpolator::Sample(76.90,0.4));
+   add_sample(CurveInterpolator::Sample(95.75,0.5));
+   add_sample(CurveInterpolator::Sample(114.60,0.6));
+   add_sample(CurveInterpolator::Sample(133.45,0.7));
+   add_sample(CurveInterpolator::Sample(152.30,0.8));
+   add_sample(CurveInterpolator::Sample(171.15,0.9));
+   add_sample(CurveInterpolator::Sample(190.00,1.0));
   }
 };
 
@@ -143,7 +163,7 @@ class TemperatureInterpreter : public CurveInterpolator {
 
 #define SERIAL_DEBUG_DISABLED 1
 
-ReactESP app;
+reactesp::ReactESP app;
 
 void setup() {
 #ifndef SERIAL_DEBUG_DISABLED
@@ -195,6 +215,46 @@ SensESPAppBuilder builder;
   display->display();
   
 /***************************************************************************
+* BMP280 Sensor : to get environment : temperature, pressure
+***************************************************************************/
+bmp280.begin(0x77);
+auto* main_engine_bay_temperature = new RepeatSensor<float>(5000, read_temp_callback);
+auto* main_engine_bay_pressure = new RepeatSensor<float>(60000, read_pressure_callback);
+
+auto main_engine_bay_temperature_metadata =
+    new SKMetadata("K",             // units
+        "Engine Bay Temperature",   // display name
+        "Engine Bay Temperature",   // description
+        "Bay Temperature",          // short name
+        10.                         // timeout, in seconds
+    );
+main_engine_bay_temperature
+    ->connect_to(new SKOutputFloat("propulsion.engineBay.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata))
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(2, "Bay T: ", temperature); }));
+
+auto main_engine_bay_pressure_metadata =
+    new SKMetadata("Pa",            // units
+        "Engine Bay Pressure",      // display name
+        "Engine Bay Pressure",      // description
+        "Bay Pressure",             // short name
+        10.                         // timeout, in seconds
+    );
+
+main_engine_bay_pressure
+    ->connect_to(new SKOutputFloat("propulsion.engineBay.pressure", "/mainEngineBayPressure/skPath", main_engine_bay_pressure_metadata))
+    ->connect_to(new LambdaConsumer<float>([](float pressure) { displayData(3, "Bay P: ", pressure); }));
+
+
+/*
+    // 0x77 is the default address. Some chips use 0x76, which is shown here.
+    // If you need to use the TwoWire library instead of the Wire library, there
+    // is a different constructor: see bmp280.h
+    
+
+
+*/
+
+/***************************************************************************
 * FAE31020 Sensor : Engine Coolant Temp Config
 ***************************************************************************/
 
@@ -236,51 +296,51 @@ DallasTemperatureSensors* dts = new DallasTemperatureSensors(ONEWIRE_PIN);
 
 // define three 1-Wire temperature sensors that update every 1000 ms
 // and have specific web UI configuration paths
+// define metadata for sensors
 
 auto main_engine_exhaust_temperature =
       new OneWireTemperature(dts, 5000, "/mainEngineWetExhaustTemp/oneWire");
-auto main_engine_bay_temperature =
-      new OneWireTemperature(dts, 5000, "/mainEngineBayTemp/oneWire");
-auto main_engine_coolant_temperature =
-      new OneWireTemperature(dts, 5000, "/mainCoolantTemp/oneWire");
-
-// define metadata for sensors
-
-auto main_engine_bay_temperature_metadata =
-    new SKMetadata("K",                   // units
-                "Engine Bay Temperature",  // display name
-                "Engine Bay Temperature",  // description
-                "Bay Temperature",         // short name
-                10.                    // timeout, in seconds
-    );
 auto main_engine_exhaust_temperature_metadata =
-    new SKMetadata("K",                        // units
+    new SKMetadata("K",                     // units
                 "Wet Exhaust Temperature",  // display name
                 "Wet Exhaust Temperature",  // description
                 "Exhaust Temperature",      // short name
                 10.                         // timeout, in seconds
     );
-auto main_engine_coolant_temperature_metadata =
-    new SKMetadata("K",                        // units
-                "Coolant liquid Temperature",  // display name
-                "Coolant liquid Temperature",  // description
-                "Coolant Temperature",      // short name
+// propulsion.*.wetExhaustTemperature is a non-standard path
+main_engine_exhaust_temperature
+    ->connect_to(new SKOutputFloat("propulsion.main.exhaustTemperature", "/mainEngineExhaustTemperature/skPath", main_engine_exhaust_temperature_metadata))
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(5, "Exhaust", temperature); }));
+
+/* Alternative to BMP280 sensor using DS18B20
+auto main_engine_bay_temperature =
+      new OneWireTemperature(dts, 5000, "/mainEngineBayTemp/oneWire");
+auto main_engine_bay_temperature_metadata =
+    new SKMetadata("K",                     // units
+                "Engine Bay Temperature",   // display name
+                "Engine Bay Temperature",   // description
+                "Bay Temperature",          // short name
                 10.                         // timeout, in seconds
     );
-
-// connect the sensors to Signal K output paths
 main_engine_bay_temperature
     ->connect_to(new SKOutputFloat("propulsion.main.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata))
     ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(3, "Engine Bay", temperature); }));
-  
-// propulsion.*.wetExhaustTemperature is a non-standard path
-main_engine_exhaust_temperature
-    ->connect_to(new SKOutputFloat("propulsion.main.exhaustTemperature", "/mainEngineWetExhaustTemperature/skPath", main_engine_exhaust_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(4, "Exhaust", temperature); }));
+*/
 
+/* Alternative to FAE31020 sensor using DS18B20
+auto main_engine_coolant_temperature =
+      new OneWireTemperature(dts, 5000, "/mainCoolantTemp/oneWire");
+auto main_engine_coolant_temperature_metadata =
+    new SKMetadata("K",                         // units
+                "Coolant liquid Temperature",   // display name
+                "Coolant liquid Temperature",   // description
+                "Coolant Temperature",          // short name
+                10.                             // timeout, in seconds
+    );
 main_engine_coolant_temperature
     ->connect_to(new SKOutputFloat("propulsion.main.coolantTemperature", "/mainEngineCoolantTemperature/skPath", main_engine_coolant_temperature_metadata))
     ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(5, "Coolant", temperature); }));
+*/
 
 
 /***************************************************************************
@@ -292,7 +352,7 @@ const float Rc1 = 100;
 
 const float CAPACITY = 90; // Capacity in 1000xLiters
 
-/* A retravailler 
+/* A retravailler
 auto main_engine_tank_capacity_metadata =
     new SKMetadata("L",                   // units
                 "Diesel Tank Capacity",  // display name
@@ -305,6 +365,7 @@ main_engine_tank_capacity
     ->connect_to(new SKOutputInt("self.tanks.fuel.main.capacity", "/mainEngineTankCapacity/skPath", main_engine_tank_capacity_metadata))
     ->connect_to(new LambdaConsumer<int>([](int capacity));
 */
+
 auto main_engine_tank_level_metadata =
     new SKMetadata("L",                   // units
                 "Diesel Tank remaining Level",  // display name
@@ -318,7 +379,7 @@ main_engine_tank_currentVolume
     ->connect_to(new VoltageDividerR2(Rc1, Vin, "/FuelTank/capacity/sender"))
     ->connect_to(new TankCapacityInterpreter("/FuelTank/capacity/curve"))
     ->connect_to(new Linear(CAPACITY, 0.0, "/FuelTank/capacity/calibrate"))
-    ->connect_to(new SKOutputInt("self.tanks.fuel.main.currentVolume", "/mainEngineTankCapacity/skPath", main_engine_tank_capacity_metadata))
+    ->connect_to(new SKOutputInt("self.tanks.fuel.main.currentVolume", "/mainEngineTankCapacity/skPath", main_engine_tank_level_metadata))
     ->connect_to(new LambdaConsumer<int>([](int capacity) { displayData(6, "Tank Capacity", capacity+273.15); })); // add manually 273.15 because it is not a temperature.
 
 /***************************************************************************
