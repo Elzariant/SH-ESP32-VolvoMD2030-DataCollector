@@ -34,6 +34,7 @@
 
 /***************************
 * PIN Definition for DFRobot Firebeetle board
+* https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654
 ***************************/
 /*
 #define ONEWIRE_PIN 17
@@ -46,6 +47,7 @@
 
 /***************************
 * PIN Definition for DFRobot Beetle board
+* https://wiki.dfrobot.com/Beetle_ESP32_SKU_DFR0575
 ***************************/
 #define ONEWIRE_PIN 13        // Pin D7
 #define FUEL_GAUGE_PIN 34     // PIN A2
