@@ -55,14 +55,12 @@
 #define SCL_PIN 22
 
 
-/* Screen definition :
-*/
+/// Screen definition
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
 // define temperature display units
 #define TEMP_DISPLAY_FUNC KelvinToCelsius
-
 
 using namespace sensesp;
 
@@ -72,23 +70,19 @@ Adafruit_SSD1306* display;
 Adafruit_BMP280 bmp280;
 const float Vin = 3.3;
 
-
-float read_temp_callback() {
-    return (bmp280.readTemperature() + 273.15);
-}
-float read_pressure_callback() {
-    return (bmp280.readPressure());
-}
+/// Read functions for BMP280
+float read_temp_callback() { return (bmp280.readTemperature() + 273.15); }
+float read_pressure_callback() { return (bmp280.readPressure()); }
 
 /// Clear a text row on an Adafruit graphics display
 void ClearRow(int row) { display->fillRect(0, 8 * row, SCREEN_WIDTH, 8, 0); }
 
 float KelvinToCelsius(float temp) { return temp - 273.15; }
 
+/// Display function
 void displayData(int row, String title, float value) {
   ClearRow(row);
   display->setCursor(0, 8 * row);
-  
   display->printf("%s: %.1f", title.c_str(), TEMP_DISPLAY_FUNC(value));
   display->display();
 }
@@ -102,8 +96,8 @@ class TankCapacityInterpreter : public CurveInterpolator {
     clear_samples();
     add_sample(CurveInterpolator::Sample(0, 0.0));
     add_sample(CurveInterpolator::Sample(36, 0.0));
-    add_sample(CurveInterpolator::Sample(40, 0.0));
-    add_sample(CurveInterpolator::Sample(44, 0.0));
+    add_sample(CurveInterpolator::Sample(40, 0.0)); 
+    add_sample(CurveInterpolator::Sample(44, 0.0));  // To that point : artificial values 
     add_sample(CurveInterpolator::Sample(200, 0.3448));
     add_sample(CurveInterpolator::Sample(355, 0.125));
     add_sample(CurveInterpolator::Sample(433, 0.25));
@@ -113,14 +107,15 @@ class TankCapacityInterpreter : public CurveInterpolator {
     add_sample(CurveInterpolator::Sample(588, 0.75));
     add_sample(CurveInterpolator::Sample(637.0, 0.875));
     add_sample(CurveInterpolator::Sample(675.0, 1));
-    add_sample(CurveInterpolator::Sample(680.0, 1));
+    add_sample(CurveInterpolator::Sample(680.0, 1)); // From that point : artificial values 
     add_sample(CurveInterpolator::Sample(685.0, 1));
     add_sample(CurveInterpolator::Sample(1000.0, 1));
   }
 };
 
-// **NOT IMPLEMENTED YET ** Fuel Consomption interpreter based on engine RPM
+// Fuel Consomption interpreter based on engine RPM
 // Provide fuel consumption related to RPM
+// Source : D1-30 engine data from https://www.boat-fuel-economy.com/volvo-penta-diesel-d1-30-fuel-consumption-liters
 class FuelInterpreter : public CurveInterpolator {
  public:
   FuelInterpreter(String config_path = "")
@@ -171,7 +166,7 @@ reactesp::ReactESP app;
 
 void setup() {
 #ifndef SERIAL_DEBUG_DISABLED
-  SetupSerialDebug(250000);
+  SetupSerialDebug(115200);
 #endif
 
 
@@ -217,6 +212,7 @@ SensESPAppBuilder builder;
 /***************************************************************************
 * BMP280 Sensor : to get environment : temperature, pressure
 ***************************************************************************/
+
 /*
 //if (!bmp280.begin(0x77)){
 if (!bmp280.begin()){
@@ -236,7 +232,7 @@ auto main_engine_bay_temperature_metadata =
     );
 main_engine_bay_temperature
     ->connect_to(new SKOutputFloat("propulsion.engineBay.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(5, "Bay T: ", temperature); }));
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(6, "Bay T: ", temperature); }));
 
 auto main_engine_bay_pressure_metadata =
     new SKMetadata("Pa",            // units
@@ -248,7 +244,7 @@ auto main_engine_bay_pressure_metadata =
 
 main_engine_bay_pressure
     ->connect_to(new SKOutputFloat("propulsion.engineBay.pressure", "/mainEngineBayPressure/skPath", main_engine_bay_pressure_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float pressure) { displayData(7, "Bay P: ", pressure); }));
+    ->connect_to(new LambdaConsumer<float>([](float pressure) { displayData(8, "Bay P: ", pressure); }));
 }
 */
 
@@ -282,7 +278,7 @@ main_engine_coolant_temperature
     //->connect_to(new VoltageDividerR2(Rt1, Vin, "/EngineTemperature/sender"))
     ->connect_to(getTemperatureFromResistance_transform)
     ->connect_to(new SKOutputFloat("propulsion.engine.coolantTemperature", "/mainEngineCoolantTemperature/sk_path", main_engine_coolant_temperature_metadata)) // send to SignalK
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(6, "Coolant", temperature); })); // send to display
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(7, "Coolant", temperature); })); // send to display
 */
 
 
@@ -308,7 +304,7 @@ auto main_engine_exhaust_temperature_metadata =
 // propulsion.*.wetExhaustTemperature is a non-standard path
 main_engine_exhaust_temperature
     ->connect_to(new SKOutputFloat("propulsion.engine.exhaustTemperature", "/mainEngineExhaustTemperature/skPath", main_engine_exhaust_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(4, "Exhaust", temperature); }));
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(5, "Exhaust", temperature); }));
 
 
 /*=============================================================*/
@@ -324,7 +320,7 @@ auto main_engine_bay_temperature_metadata =
     );
 main_engine_bay_temperature
     ->connect_to(new SKOutputFloat("propulsion.engineBay.temperature", "/mainEngineBayTemperature/skPath", main_engine_bay_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(5, "Engine Bay", temperature); }));
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(6, "Engine Bay", temperature); }));
 */
 
 /*=============================================================*/
@@ -340,7 +336,7 @@ auto main_engine_coolant_temperature_metadata =
     );
 main_engine_coolant_temperature
     ->connect_to(new SKOutputFloat("propulsion.engine.coolantTemperature", "/mainEngineCoolantTemperature/skPath", main_engine_coolant_temperature_metadata))
-    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(6, "Coolant", temperature); }));
+    ->connect_to(new LambdaConsumer<float>([](float temperature) { displayData(7, "Coolant", temperature); }));
 */
 
 
@@ -348,14 +344,13 @@ main_engine_coolant_temperature
 * Tank remaining capacity using fuel gauge
 ****************************************************************************/
 
-auto* main_engine_tank_currentVolume = new AnalogInput(FUEL_GAUGE_PIN, 5000);
+auto* main_engine_tank_currentVolume = new AnalogInput(FUEL_GAUGE_PIN, 500);
 const float Rc1 = 100;
-
-const float CAPACITY = 90; // Capacity in 1000xLiters
-auto* Capacity=new Configurable("Diesel Tank Capacity", "Capacity of Diesel tank in Liters");
+const float CAPACITY = 90.0; // Capacity in 1000xLiters
+//auto* Capacity=new Configurable("Diesel Tank Capacity", "Capacity of Diesel tank in Liters");
 
 auto main_engine_tank_level_metadata =
-    new SKMetadata("%",                   // units
+    new SKMetadata("L",                   // units
                 "Diesel Tank remaining Level",  // display name
                 "Diesel Tank remaining Level",  // description
                 "Tank Level",         // short name
@@ -365,40 +360,9 @@ auto main_engine_tank_level_metadata =
 
 main_engine_tank_currentVolume
     ->connect_to(new TankCapacityInterpreter("/FuelTank/capacity/curve"))
-//    ->connect_to(new Linear(90.0,0))
-    ->connect_to(new SKOutputFloat("self.tanks.fuel.main.currentVolume", "/mainEngineTankCapacity/skPath", main_engine_tank_level_metadata));
-//    ->connect_to(new LambdaConsumer<float>([](float capacity) { displayData(2, "Tank Capacity", capacity+273.15); })); // add manually 273.15 because it is not a temperature.
-
-//FIN TEST avec exemple du net
-
-
-/*
-main_engine_tank_currentVolume
-    ->connect_to(new AnalogVoltage())
-    ->connect_to(new VoltageDividerR2(Rc1, Vin, "/FuelTank/capacity/sender"))
-    //->connect_to(new TankCapacityInterpreter("/FuelTank/capacity/curve"))
-    //->connect_to(new Linear(CAPACITY, 0.0, "/FuelTank/capacity/calibrate"))
+    ->connect_to(new Linear(CAPACITY,0))
     ->connect_to(new SKOutputFloat("self.tanks.fuel.main.currentVolume", "/mainEngineTankCapacity/skPath", main_engine_tank_level_metadata))
-    ->connect_to(new LambdaConsumer<int>([](int capacity) { displayData(2, "Tank Capacity", capacity+273.15); })); // add manually 273.15 because it is not a temperature.
-*/
-
-
-
-/* A retravailler
-auto main_engine_tank_capacity_metadata =
-    new SKMetadata("L",                   // units
-                "Diesel Tank Capacity",  // display name
-                "Diesel Tank Capacity",  // description
-                "Tank Capacity",         // short name
-                10.                    // timeout, in seconds
-    );
-
-main_engine_tank_capacity
-    ->connect_to(new SKOutputInt("self.tanks.fuel.main.capacity", "/mainEngineTankCapacity/skPath", main_engine_tank_capacity_metadata))
-    ->connect_to(new LambdaConsumer<int>([](int capacity));
-*/
-
-
+    ->connect_to(new LambdaConsumer<float>([](float capacity) { displayData(2, "Tank Capacity", capacity+273.15); })); // add manually 273.15 because it is not a temperature.
 
 
 
@@ -407,31 +371,28 @@ main_engine_tank_capacity
 ***************************************************************************/
 
 auto* main_engine_rpm = new DigitalInputCounter(RPM_PIN, INPUT_PULLUP, RISING, 500);
-const char* config_path_calibrate = "/Engine RPM/calibrate";
-const char* config_path_skpath = "/mainEngineRPM/sk_path";
-const float multiplier = 1.0;
+float multiplier = 1.0;
 
 auto main_engine_rpm_metadata =
     new SKMetadata("rpm",                   // units
-                "Engine rotation speed",  // display name
-                "Engine rotation speed",  // description
-                "Engine Speed",         // short name
-                10.                    // timeout, in seconds
+                "Engine rotation speed",    // display name
+                "Engine rotation speed",    // description
+                "Engine Speed",             // short name
+                10.                         // timeout, in seconds
     );
 auto main_engine_consumption_metadata =
     new SKMetadata("L/H",                   // units
                 "Engine fuel consumption",  // display name
                 "Engine fuel consumption",  // description
                 "Fuel consumption",         // short name
-                10.                    // timeout, in seconds
+                10.                         // timeout, in seconds
     );
 
 // Calculate engine speed (RPM)
 main_engine_rpm
-    ->connect_to(new Frequency(multiplier, config_path_calibrate))  
-    // connect the output of sensor to the input of Frequency()
-    ->connect_to(new SKOutputFloat("propulsion.engine.revolutions", "/mainEngineRPM/skPath", main_engine_rpm_metadata)
-    );  
+    ->connect_to(new Frequency(multiplier, "/Engine RPM/calibrate"))  
+    ->connect_to(new SKOutputFloat("propulsion.engine.revolutions", "/mainEngineRPM/skPath", main_engine_rpm_metadata))
+    ->connect_to(new LambdaConsumer<int>([](float speed) { displayData(3, "Engine RPM", speed+273.15); })); // add manually 273.15 because it is not a temperature.
     
 // Calculate fuel consumption
 main_engine_rpm
@@ -439,7 +400,7 @@ main_engine_rpm
     // times by 6 to go from Hz to RPM
     ->connect_to(new FuelInterpreter("/Engine Fuel/curve"))
     ->connect_to(new SKOutputFloat("propulsion.engine.fuel.rate", "/mainEngineConsumption/sk_path", main_engine_consumption_metadata))
-    ->connect_to(new LambdaConsumer<int>([](int speed) { displayData(3, "Engine RPM", speed+273.15); })); // add manually 273.15 because it is not a temperature.
+    ->connect_to(new LambdaConsumer<int>([](float consumption) { displayData(4, "Consumption", consumption+273.15); })); // add manually 273.15 because it is not a temperature.
 
 
 
